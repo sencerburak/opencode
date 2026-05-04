@@ -59,10 +59,10 @@ export function SessionSidePanel(props: {
       settings.general.showFileTree(),
   )
 
-  const reviewOpen = createMemo(() => isDesktop() && view().reviewPanel.opened())
-  const fileOpen = createMemo(() => isDesktop() && shown() && layout.fileTree.opened())
+  const reviewOpen = createMemo(() => view().reviewPanel.opened())
+  const fileOpen = createMemo(() => shown() && layout.fileTree.opened())
   const open = createMemo(() => reviewOpen() || fileOpen())
-  const reviewTab = createMemo(() => isDesktop())
+  const reviewTab = createMemo(() => true)
   const panelWidth = createMemo(() => {
     if (!open()) return "0px"
     if (reviewOpen()) return `calc(100% - ${layout.session.width()}px)`
@@ -200,7 +200,16 @@ export function SessionSidePanel(props: {
   })
 
   return (
-    <Show when={isDesktop()}>
+    <>
+      <Show when={!isDesktop() && open()}>
+        <div
+          class="fixed inset-0 z-40 bg-black/50"
+          onClick={() => {
+            if (reviewOpen()) view().reviewPanel.close()
+            if (fileOpen()) layout.fileTree.close()
+          }}
+        />
+      </Show>
       <aside
         id="review-panel"
         aria-label={language.t("session.panel.reviewAndFiles")}
@@ -208,11 +217,13 @@ export function SessionSidePanel(props: {
         inert={!open()}
         class="relative min-w-0 h-full flex shrink-0 overflow-hidden bg-background-base"
         classList={{
-          "pointer-events-none": !open(),
+          "pointer-events-none": !open() && isDesktop(),
           "transition-[width] duration-[240ms] ease-[cubic-bezier(0.22,1,0.36,1)] will-change-[width] motion-reduce:transition-none":
-            !props.size.active() && !props.reviewSnap,
+            !props.size.active() && !props.reviewSnap && isDesktop(),
+          "!fixed !inset-0 !w-full !h-full z-50": !isDesktop() && open(),
+          "!hidden": !isDesktop() && !open(),
         }}
-        style={{ width: panelWidth() }}
+        style={{ width: isDesktop() ? panelWidth() : undefined }}
       >
         <div class="size-full flex border-l border-border-weaker-base">
           <div
@@ -448,6 +459,6 @@ export function SessionSidePanel(props: {
           </Show>
         </div>
       </aside>
-    </Show>
+    </>
   )
 }
