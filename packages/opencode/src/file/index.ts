@@ -287,7 +287,7 @@ const audioMime: Record<string, string> = {
   opus: "audio/opus",
 }
 
-const AUDIO_MAX_BYTES = 10 * 1024 * 1024 // 10 MB
+const AUDIO_MAX_BYTES = 100 * 1024 * 1024 // 100 MB
 
 type Entry = { files: string[]; dirs: string[] }
 
@@ -525,7 +525,11 @@ export const layer = Layer.effect(
         throw new Error("Access denied: path escapes project directory")
       }
 
-      if (isImageByExtension(file)) {
+      const isImage = isImageByExtension(file)
+      const isAudio = isAudioByExtension(file)
+      log.debug("file type check", { file, isImage, isAudio, ext: ext(file) })
+
+      if (isImage) {
         const exists = yield* appFs.existsSafe(full)
         if (exists) {
           const bytes = yield* appFs.readFile(full).pipe(Effect.catch(() => Effect.succeed(new Uint8Array())))
@@ -539,10 +543,12 @@ export const layer = Layer.effect(
         return { type: "text" as const, content: "" }
       }
 
-      if (isAudioByExtension(file)) {
+      if (isAudio) {
         const exists = yield* appFs.existsSafe(full)
+        log.debug("audio file check", { file, full, exists })
         if (exists) {
           const bytes = yield* appFs.readFile(full).pipe(Effect.catch(() => Effect.succeed(new Uint8Array())))
+          log.debug("audio file read", { file, byteLength: bytes.byteLength, max: AUDIO_MAX_BYTES })
           if (bytes.byteLength <= AUDIO_MAX_BYTES) {
             return {
               type: "text" as const,
