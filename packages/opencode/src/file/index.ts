@@ -277,16 +277,30 @@ const mime: Record<string, string> = {
   heif: "image/heif",
 }
 
+const audioMime: Record<string, string> = {
+  mp3: "audio/mpeg",
+  wav: "audio/wav",
+  ogg: "audio/ogg",
+  m4a: "audio/mp4",
+  aac: "audio/aac",
+  flac: "audio/flac",
+  opus: "audio/opus",
+}
+
+const AUDIO_MAX_BYTES = 10 * 1024 * 1024 // 10 MB
+
 type Entry = { files: string[]; dirs: string[] }
 
 const ext = (file: string) => path.extname(file).toLowerCase().slice(1)
 const name = (file: string) => path.basename(file).toLowerCase()
 const isImageByExtension = (file: string) => image.has(ext(file))
+const isAudioByExtension = (file: string) => ext(file) in audioMime
 const isTextByExtension = (file: string) => text.has(ext(file))
 const isTextByName = (file: string) => textName.has(name(file))
 const isBinaryByExtension = (file: string) => binary.has(ext(file))
 const isImage = (mimeType: string) => mimeType.startsWith("image/")
 const getImageMimeType = (file: string) => mime[ext(file)] || "image/" + ext(file)
+const getAudioMimeType = (file: string) => audioMime[ext(file)] || "audio/" + ext(file)
 
 function shouldEncode(mimeType: string) {
   const type = mimeType.toLowerCase()
@@ -331,7 +345,7 @@ export interface Interface {
   }) => Effect.Effect<string[]>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/File") {}
+export class Service extends Context.Service<Service, Interface>()("@opencode/File") { }
 
 export const layer = Layer.effect(
   Service,
@@ -523,6 +537,22 @@ export const layer = Layer.effect(
           }
         }
         return { type: "text" as const, content: "" }
+      }
+
+      if (isAudioByExtension(file)) {
+        const exists = yield* appFs.existsSafe(full)
+        if (exists) {
+          const bytes = yield* appFs.readFile(full).pipe(Effect.catch(() => Effect.succeed(new Uint8Array())))
+          if (bytes.byteLength <= AUDIO_MAX_BYTES) {
+            return {
+              type: "text" as const,
+              content: Buffer.from(bytes).toString("base64"),
+              mimeType: getAudioMimeType(file),
+              encoding: "base64" as const,
+            }
+          }
+        }
+        return { type: "binary" as const, content: "" }
       }
 
       const knownText = isTextByExtension(file) || isTextByName(file)

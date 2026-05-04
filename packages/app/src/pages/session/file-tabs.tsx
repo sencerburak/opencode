@@ -429,7 +429,7 @@ export function FileTabContent(props: { tab: string }) {
           mode: "auto",
           path: path(),
           current: state()?.content,
-          readFile: (filePath) =>
+          readFile: (filePath: string) =>
             sdk.client.file
               .read({ path: filePath })
               .then((x) => x.data)
