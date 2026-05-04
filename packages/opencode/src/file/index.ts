@@ -525,11 +525,11 @@ export const layer = Layer.effect(
         throw new Error("Access denied: path escapes project directory")
       }
 
-      const isImage = isImageByExtension(file)
+      const isImageFile = isImageByExtension(file)
       const isAudio = isAudioByExtension(file)
-      log.debug("file type check", { file, isImage, isAudio, ext: ext(file) })
+      log.debug("file type check", { file, isImageFile, isAudio, ext: ext(file) })
 
-      if (isImage) {
+      if (isImageFile) {
         const exists = yield* appFs.existsSafe(full)
         if (exists) {
           const bytes = yield* appFs.readFile(full).pipe(Effect.catch(() => Effect.succeed(new Uint8Array())))
