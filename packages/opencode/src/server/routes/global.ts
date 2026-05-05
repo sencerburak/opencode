@@ -3,6 +3,8 @@ import { describeRoute, resolver, validator } from "hono-openapi"
 import { streamSSE } from "hono/streaming"
 import { Effect } from "effect"
 import z from "zod"
+import * as fs from "node:fs/promises"
+import * as path from "node:path"
 import { BusEvent } from "@/bus/bus-event"
 import { SyncEvent } from "@/sync"
 import { GlobalBus } from "@/bus/global"
@@ -16,6 +18,21 @@ import { lazy } from "../../util/lazy"
 import { Config } from "@/config/config"
 import { errors } from "../error"
 import { disposeAllInstancesAndEmitGlobalDisposed } from "../global-lifecycle"
+import { Global } from "@opencode-ai/core/global"
+
+// Key-value storage backed by the server filesystem.
+// Bucket "opencode.global.dat" → ~/.config/opencode/kv/ (shared global config volume)
+// All other buckets → ~/.local/share/opencode/kv/ (per-repo data volume)
+function kvDir(bucket: string) {
+  const safeBucket = bucket.replace(/[^a-zA-Z0-9._-]/g, "_")
+  const base = bucket === "opencode.global.dat" ? Global.Path.config : Global.Path.data
+  return path.join(base, "kv", safeBucket)
+}
+
+function kvPath(bucket: string, key: string) {
+  const safeKey = key.replace(/[^a-zA-Z0-9._:-]/g, "_")
+  return path.join(kvDir(bucket), `${safeKey}.json`)
+}
 
 const log = Log.create({ service: "server" })
 
@@ -281,6 +298,106 @@ export const GlobalRoutes = lazy(() =>
           },
         })
         return c.json({ success: true, version: target })
+      },
+    )
+    .get(
+      "/kv",
+      describeRoute({
+        summary: "Get KV entry",
+        description: "Read a persisted key-value entry from server-side storage.",
+        operationId: "global.kv.get",
+        responses: {
+          200: {
+            description: "KV value",
+            content: {
+              "application/json": {
+                schema: resolver(z.object({ value: z.string().nullable() })),
+              },
+            },
+          },
+        },
+      }),
+      validator(
+        "query",
+        z.object({
+          bucket: z.string(),
+          key: z.string(),
+        }),
+      ),
+      async (c) => {
+        const { bucket, key } = c.req.valid("query")
+        const file = kvPath(bucket, key)
+        try {
+          const value = await fs.readFile(file, "utf8")
+          return c.json({ value })
+        } catch {
+          return c.json({ value: null })
+        }
+      },
+    )
+    .put(
+      "/kv",
+      describeRoute({
+        summary: "Set KV entry",
+        description: "Write a persisted key-value entry to server-side storage.",
+        operationId: "global.kv.set",
+        responses: {
+          200: {
+            description: "KV stored",
+            content: {
+              "application/json": {
+                schema: resolver(z.boolean()),
+              },
+            },
+          },
+        },
+      }),
+      validator(
+        "json",
+        z.object({
+          bucket: z.string(),
+          key: z.string(),
+          value: z.string(),
+        }),
+      ),
+      async (c) => {
+        const { bucket, key, value } = c.req.valid("json")
+        const dir = kvDir(bucket)
+        const file = kvPath(bucket, key)
+        await fs.mkdir(dir, { recursive: true })
+        await fs.writeFile(file, value, "utf8")
+        return c.json(true)
+      },
+    )
+    .delete(
+      "/kv",
+      describeRoute({
+        summary: "Delete KV entry",
+        description: "Remove a persisted key-value entry from server-side storage.",
+        operationId: "global.kv.delete",
+        responses: {
+          200: {
+            description: "KV deleted",
+            content: {
+              "application/json": {
+                schema: resolver(z.boolean()),
+              },
+            },
+          },
+        },
+      }),
+      validator(
+        "query",
+        z.object({
+          bucket: z.string(),
+          key: z.string(),
+        }),
+      ),
+      async (c) => {
+        const { bucket, key } = c.req.valid("query")
+        const file = kvPath(bucket, key)
+        await fs.unlink(file).catch(() => { /* already gone */ })
+        return c.json(true)
       },
     ),
 )
