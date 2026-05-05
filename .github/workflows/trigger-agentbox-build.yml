@@ -1,0 +1,36 @@
+name: trigger-agentbox-build
+
+# Fires whenever commits land on `main` in this fork.
+# Dispatches a repository_dispatch event to sencerburak/infra so the
+# agents-images workflow rebuilds the agentbox with the new opencode code.
+#
+# REQUIRED SECRET (set in sencerburak/opencode repo settings):
+#   INFRA_DISPATCH_TOKEN — a classic GitHub PAT with `repo` scope that has
+#                          write access to sencerburak/infra.
+#   Create at: https://github.com/settings/tokens
+#   Add at:    https://github.com/sencerburak/opencode/settings/secrets/actions
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger agentbox rebuild in infra repo
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.INFRA_DISPATCH_TOKEN }}
+          script: |
+            await github.rest.repos.createDispatchEvent({
+              owner: 'sencerburak',
+              repo: 'infra',
+              event_type: 'opencode-updated',
+              client_payload: {
+                sha: context.sha,
+                ref: context.ref,
+                message: context.payload.head_commit?.message ?? '',
+              },
+            });
+            console.log(`Dispatched opencode-updated to sencerburak/infra (sha: ${context.sha})`);
