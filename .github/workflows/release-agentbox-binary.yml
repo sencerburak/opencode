@@ -1,0 +1,78 @@
+name: release-agentbox-binary
+
+# Builds the opencode linux binary and publishes it to the rolling
+# "agentbox-latest" GitHub release, then dispatches a rebuild trigger
+# to sencerburak/infra so the agentbox Docker image picks up the new binary.
+#
+# This replaces the trigger-agentbox-build.yml push-to-main dispatch:
+# the infra build only starts AFTER the binary is available in the release.
+#
+# REQUIRED SECRET:
+#   INFRA_DISPATCH_TOKEN — fine-grained PAT with "Contents: read/write"
+#                          on sencerburak/infra. Rotate before 2026-05-31.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --ignore-scripts
+        working-directory: .
+
+      - name: Build linux x64 binary
+        working-directory: packages/opencode
+        env:
+          OPENCODE_CHANNEL: latest
+        run: bun run build --single
+
+      - name: Prepare binary artifact
+        run: |
+          cp packages/opencode/dist/opencode-linux-x64/bin/opencode opencode-linux-x64
+          chmod +x opencode-linux-x64
+
+      - name: Delete existing rolling release (if any)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete agentbox-latest --yes 2>/dev/null || true
+          git push origin :refs/tags/agentbox-latest 2>/dev/null || true
+
+      - name: Create rolling release with binary
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create agentbox-latest \
+            --title "Agentbox Binary (Latest)" \
+            --notes "Auto-built from \`main\` at ${{ github.sha }}. Used by the infra agentbox Dockerfile." \
+            --prerelease \
+            opencode-linux-x64
+
+      - name: Dispatch agentbox rebuild to infra
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.INFRA_DISPATCH_TOKEN }}
+          script: |
+            await github.rest.repos.createDispatchEvent({
+              owner: 'sencerburak',
+              repo: 'infra',
+              event_type: 'opencode-updated',
+              client_payload: {
+                sha: context.sha,
+                ref: context.ref,
+                message: context.payload.head_commit?.message ?? '',
+              },
+            });
+            console.log(`Dispatched opencode-updated to sencerburak/infra (sha: ${context.sha})`);
