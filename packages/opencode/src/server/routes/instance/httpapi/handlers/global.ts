@@ -5,6 +5,7 @@ import { Bus } from "@/bus"
 import { Installation } from "@/installation"
 import { disposeAllInstancesAndEmitGlobalDisposed } from "@/server/global-lifecycle"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
+import { Global } from "@opencode-ai/core/global"
 import * as Log from "@opencode-ai/core/util/log"
 import { Effect, Queue, Schema } from "effect"
 import * as Stream from "effect/Stream"
@@ -12,7 +13,9 @@ import { HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
 import * as Sse from "effect/unstable/encoding/Sse"
 import { RootHttpApi } from "../api"
-import { GlobalUpgradeInput } from "../groups/global"
+import { GlobalUpgradeInput, KvQuery, KvGetResult, KvSetInput } from "../groups/global"
+import fs from "fs/promises"
+import path from "path"
 
 const log = Log.create({ service: "server" })
 
@@ -146,6 +149,51 @@ export const globalHandlers = HttpApiBuilder.group(RootHttpApi, "global", (handl
       return HttpServerResponse.jsonUnsafe(result.body, { status: result.status })
     })
 
+    // Key-value storage backed by the server filesystem.
+    // Bucket "opencode.global.dat" → ~/.config/opencode/kv/ (global config volume)
+    // All other buckets → ~/.local/share/opencode/kv/ (per-repo data volume)
+    const kvDir = (bucket: string) => {
+      const safeBucket = bucket.replace(/[^a-zA-Z0-9._-]/g, "_")
+      const base = bucket === "opencode.global.dat" ? Global.Path.config : Global.Path.data
+      return path.join(base, "kv", safeBucket)
+    }
+
+    const kvPath = (bucket: string, key: string) => {
+      const safeKey = key.replace(/[^a-zA-Z0-9._:-]/g, "_")
+      return path.join(kvDir(bucket), `${safeKey}.json`)
+    }
+
+    const kvGet = Effect.fn("GlobalHttpApi.kvGet")(function* (ctx: { query: typeof KvQuery.Type }) {
+      const file = kvPath(ctx.query.bucket, ctx.query.key)
+      const value = yield* Effect.tryPromise(() => fs.readFile(file, "utf8")).pipe(
+        Effect.map((v): string | null => v),
+        Effect.orElseSucceed((): string | null => null),
+      )
+      return { value }
+    })
+
+    const kvSet = Effect.fn("GlobalHttpApi.kvSet")(function* (ctx: { payload: typeof KvSetInput.Type }) {
+      const dir = kvDir(ctx.payload.bucket)
+      const file = kvPath(ctx.payload.bucket, ctx.payload.key)
+      yield* Effect.tryPromise({
+        try: async () => {
+          await fs.mkdir(dir, { recursive: true })
+          await fs.writeFile(file, ctx.payload.value, "utf8")
+        },
+        catch: (e) => { throw e },
+      })
+      return true
+    })
+
+    const kvDelete = Effect.fn("GlobalHttpApi.kvDelete")(function* (ctx: { query: typeof KvQuery.Type }) {
+      const file = kvPath(ctx.query.bucket, ctx.query.key)
+      yield* Effect.tryPromise({
+        try: () => fs.unlink(file).catch(() => { /* already gone */ }),
+        catch: (e) => { throw e },
+      })
+      return true
+    })
+
     return handlers
       .handle("health", health)
       .handleRaw("event", event)
@@ -153,5 +201,8 @@ export const globalHandlers = HttpApiBuilder.group(RootHttpApi, "global", (handl
       .handle("configUpdate", configUpdate)
       .handle("dispose", dispose)
       .handleRaw("upgrade", upgradeRaw)
+      .handle("kvGet", kvGet)
+      .handle("kvSet", kvSet)
+      .handle("kvDelete", kvDelete)
   }),
 )

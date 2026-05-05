@@ -41,7 +41,7 @@ function cacheDelete(key: string) {
 }
 
 function cachePrune() {
-  for (;;) {
+  for (; ;) {
     if (cache.size <= CACHE_MAX_ENTRIES && cacheTotal.bytes <= CACHE_MAX_BYTES) return
     const oldest = cache.keys().next().value as string | undefined
     if (!oldest) return
@@ -289,7 +289,7 @@ async function readCurrentAsync(input: {
 async function removeAsync(storage: AsyncStorage, key: string) {
   try {
     await storage.removeItem(key)
-  } catch {}
+  } catch { }
 }
 
 async function migrateLegacyAsync(input: {
@@ -480,11 +480,12 @@ export function removePersisted(
   platform?: Platform,
 ) {
   const isDesktop = platform?.platform === "desktop" && !!platform.storage
+  const useServerStorage = isDesktop || (platform?.platform === "web" && !!platform?.storage)
 
-  if (isDesktop) {
-    void platform.storage?.(target.storage)?.removeItem(target.key)
+  if (useServerStorage) {
+    void platform!.storage?.(target.storage)?.removeItem(target.key)
     for (const storage of target.legacyStorageNames ?? []) {
-      void platform.storage?.(storage)?.removeItem(target.key)
+      void platform!.storage?.(storage)?.removeItem(target.key)
     }
     return
   }
@@ -511,15 +512,17 @@ export function persisted<T>(
   const legacy = config.legacy ?? []
 
   const isDesktop = platform.platform === "desktop" && !!platform.storage
+  // Web platform can also provide server-backed async storage (e.g. in agentbox).
+  const useServerStorage = isDesktop || (platform.platform === "web" && !!platform.storage)
 
   const currentStorage = (() => {
-    if (isDesktop) return platform.storage?.(config.storage)
+    if (useServerStorage) return platform.storage?.(config.storage)
     if (!config.storage) return localStorageDirect()
     return localStorageWithPrefix(config.storage)
   })()
 
   const legacyStorage = (() => {
-    if (!isDesktop) return localStorageDirect()
+    if (!useServerStorage) return localStorageDirect()
     if (!config.storage) return platform.storage?.()
     return platform.storage?.(LEGACY_STORAGE)
   })()
@@ -527,7 +530,7 @@ export function persisted<T>(
   const legacyStorageNames = config.legacyStorageNames ?? []
 
   const storage = (() => {
-    if (!isDesktop) {
+    if (!useServerStorage) {
       const current = currentStorage as SyncStorage
       const legacyStore = legacyStorage as SyncStorage
       const legacyStores = legacyStorageNames.map(localStorageWithPrefix)

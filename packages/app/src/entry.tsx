@@ -119,6 +119,44 @@ const clearAuthToken = () => {
   history.replaceState(null, "", location.pathname + (params.size ? `?${params}` : "") + location.hash)
 }
 
+// Server-backed AsyncStorage for the web platform.
+// Reads/writes to the opencode server's KV endpoint so that global
+// preferences (e.g. enabled models) persist on the server filesystem
+// instead of browser localStorage, surviving across sessions/subdomains.
+function makeServerStorage(baseUrl: string) {
+  return (bucket?: string): import("@solid-primitives/storage").AsyncStorage => {
+    const b = bucket ?? "opencode.direct.dat"
+    const url = (key: string) =>
+      `${baseUrl}/global/kv?bucket=${encodeURIComponent(b)}&key=${encodeURIComponent(key)}`
+    return {
+      getItem: async (key: string) => {
+        try {
+          const res = await fetch(url(key))
+          if (!res.ok) return null
+          const json = await res.json() as { value: string | null }
+          return json.value
+        } catch {
+          return null
+        }
+      },
+      setItem: async (key: string, value: string) => {
+        try {
+          await fetch(`${baseUrl}/global/kv`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ bucket: b, key, value }),
+          })
+        } catch { /* best-effort */ }
+      },
+      removeItem: async (key: string) => {
+        try {
+          await fetch(url(key), { method: "DELETE" })
+        } catch { /* best-effort */ }
+      },
+    }
+  }
+}
+
 const platform: Platform = {
   platform: "web",
   version: pkg.version,
@@ -127,6 +165,7 @@ const platform: Platform = {
   forward,
   restart,
   notify,
+  storage: makeServerStorage(getCurrentUrl()),
   getDefaultServer: async () => {
     const stored = readDefaultServerUrl()
     return stored ? ServerConnection.Key.make(stored) : null

@@ -39,7 +39,23 @@ export const GlobalPaths = {
   config: "/global/config",
   dispose: "/global/dispose",
   upgrade: "/global/upgrade",
+  kv: "/global/kv",
 } as const
+
+export const KvQuery = Schema.Struct({
+  bucket: Schema.String,
+  key: Schema.String,
+})
+
+export const KvGetResult = Schema.Struct({
+  value: Schema.NullOr(Schema.String),
+})
+
+export const KvSetInput = Schema.Struct({
+  bucket: Schema.String,
+  key: Schema.String,
+  value: Schema.String,
+})
 
 export const GlobalApi = HttpApi.make("global").add(
   HttpApiGroup.make("global")
@@ -100,6 +116,36 @@ export const GlobalApi = HttpApi.make("global").add(
           identifier: "global.upgrade",
           summary: "Upgrade opencode",
           description: "Upgrade opencode to the specified version or latest if not specified.",
+        }),
+      ),
+      HttpApiEndpoint.get("kvGet", GlobalPaths.kv, {
+        query: KvQuery,
+        success: described(KvGetResult, "KV value"),
+      }).annotateMerge(
+        OpenApi.annotations({
+          identifier: "global.kv.get",
+          summary: "Get KV entry",
+          description: "Read a persisted key-value entry from server-side storage.",
+        }),
+      ),
+      HttpApiEndpoint.put("kvSet", GlobalPaths.kv, {
+        payload: KvSetInput,
+        success: described(Schema.Boolean, "KV stored"),
+      }).annotateMerge(
+        OpenApi.annotations({
+          identifier: "global.kv.set",
+          summary: "Set KV entry",
+          description: "Write a persisted key-value entry to server-side storage.",
+        }),
+      ),
+      HttpApiEndpoint.delete("kvDelete", GlobalPaths.kv, {
+        query: KvQuery,
+        success: described(Schema.Boolean, "KV deleted"),
+      }).annotateMerge(
+        OpenApi.annotations({
+          identifier: "global.kv.delete",
+          summary: "Delete KV entry",
+          description: "Remove a persisted key-value entry from server-side storage.",
         }),
       ),
     )

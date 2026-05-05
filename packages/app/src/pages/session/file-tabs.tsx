@@ -17,6 +17,7 @@ import { useComments } from "@/context/comments"
 import { useLanguage } from "@/context/language"
 import { usePrompt } from "@/context/prompt"
 import { getSessionHandoff } from "@/pages/session/handoff"
+import { useSDK } from "@/context/sdk"
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { createSessionTabs } from "@/pages/session/helpers"
 
@@ -172,6 +173,7 @@ function createScrollSync(input: { tab: () => string; view: ReturnType<typeof us
 }
 
 export function FileTabContent(props: { tab: string }) {
+  const sdk = useSDK()
   const file = useFile()
   const comments = useComments()
   const language = useLanguage()
@@ -427,6 +429,11 @@ export function FileTabContent(props: { tab: string }) {
           mode: "auto",
           path: path(),
           current: state()?.content,
+          readFile: (filePath: string) =>
+            sdk.client.file
+              .read({ path: filePath })
+              .then((x) => x.data)
+              .catch(() => undefined),
           onLoad: scrollSync.queueRestore,
           onError: (args: { kind: "image" | "audio" | "svg" }) => {
             if (args.kind !== "svg") return
