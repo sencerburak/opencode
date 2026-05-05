@@ -5,10 +5,12 @@ name: trigger-agentbox-build
 # agents-images workflow rebuilds the agentbox with the new opencode code.
 #
 # REQUIRED SECRET (set in sencerburak/opencode repo settings):
-#   INFRA_DISPATCH_TOKEN — a classic GitHub PAT with `repo` scope that has
-#                          write access to sencerburak/infra.
-#   Create at: https://github.com/settings/tokens
-#   Add at:    https://github.com/sencerburak/opencode/settings/secrets/actions
+#   INFRA_DISPATCH_TOKEN — a fine-grained PAT with "Contents: read/write"
+#                          permission on sencerburak/infra (the agentbox-git
+#                          token from Komodo works). Do NOT use the default
+#                          GITHUB_TOKEN — it cannot dispatch to other repos.
+#   Add at: https://github.com/sencerburak/opencode/settings/secrets/actions
+#   Note: rotate before token expiry (current: 2026-05-31).
 
 on:
   push:
