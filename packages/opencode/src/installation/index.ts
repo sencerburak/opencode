@@ -162,6 +162,9 @@ export const layer: Layer.Layer<Service, never, HttpClient.HttpClient | ChildPro
           }
         }),
         method: Effect.fn("Installation.method")(function* () {
+          // Check environment variable first (used in containers like agentbox)
+          if (process.env.OPENCODE_INSTALLATION_METHOD) return process.env.OPENCODE_INSTALLATION_METHOD as Method
+
           if (process.execPath.includes(path.join(".opencode", "bin"))) return "curl" as Method
           if (process.execPath.includes(path.join(".local", "bin"))) return "curl" as Method
           if (process.execPath.startsWith("/opt/opencode")) return "curl" as Method
