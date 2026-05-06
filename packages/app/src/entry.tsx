@@ -94,6 +94,34 @@ const restart: Platform["restart"] = async () => {
   window.location.reload()
 }
 
+const checkUpdate: Platform["checkUpdate"] = async () => {
+  try {
+    const response = await fetch("https://api.github.com/repos/sencerburak/opencode/releases/latest", {
+      headers: { Accept: "application/vnd.github+json" },
+    })
+    if (!response.ok) return { updateAvailable: false }
+    const data = (await response.json()) as { tag_name?: string }
+    const latest = data.tag_name?.replace(/^v/, "")
+    if (!latest) return { updateAvailable: false }
+    const updateAvailable = latest !== pkg.version
+    return { updateAvailable, version: latest }
+  } catch {
+    return { updateAvailable: false }
+  }
+}
+
+const updateAndRestart: Platform["updateAndRestart"] = async () => {
+  const serverUrl = getCurrentUrl()
+  const response = await fetch(`${serverUrl}/global/upgrade`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({}),
+  })
+  if (response.ok) {
+    window.location.reload()
+  }
+}
+
 const root = document.getElementById("root")
 if (!(root instanceof HTMLElement) && import.meta.env.DEV) {
   throw new Error(getRootNotFoundError())
@@ -166,6 +194,8 @@ const platform: Platform = {
   restart,
   notify,
   storage: makeServerStorage(getCurrentUrl()),
+  checkUpdate,
+  updateAndRestart,
   getDefaultServer: async () => {
     const stored = readDefaultServerUrl()
     return stored ? ServerConnection.Key.make(stored) : null
