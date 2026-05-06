@@ -127,6 +127,9 @@ export const globalHandlers = HttpApiBuilder.group(RootHttpApi, "global", (handl
           properties: { version: target },
         },
       })
+      // Exit after a short delay so the response is delivered before we die.
+      // The entrypoint restart loop will relaunch opencode with the new binary.
+      setTimeout(() => process.exit(0), 500)
       return result
     })
 

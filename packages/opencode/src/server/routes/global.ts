@@ -297,7 +297,11 @@ export const GlobalRoutes = lazy(() =>
             properties: { version: target },
           },
         })
-        return c.json({ success: true, version: target })
+        const response = c.json({ success: true, version: target })
+        // Exit after a short delay so the response is delivered before we die.
+        // The entrypoint restart loop will relaunch opencode with the new binary.
+        setTimeout(() => process.exit(0), 500)
+        return response
       },
     )
     .get(
