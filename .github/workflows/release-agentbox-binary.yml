@@ -32,10 +32,15 @@ jobs:
         run: bun install --ignore-scripts
         working-directory: .
 
+      - name: Get version
+        id: version
+        run: echo "version=$(jq -r .version packages/opencode/package.json)" >> $GITHUB_OUTPUT
+
       - name: Build linux x64 binary
         working-directory: packages/opencode
         env:
           OPENCODE_CHANNEL: latest
+          OPENCODE_VERSION: ${{ steps.version.outputs.version }}
         run: bun run build --single
 
       - name: Prepare binary artifact
@@ -59,6 +64,20 @@ jobs:
             --notes "Auto-built from \`main\` at ${{ github.sha }}. Used by the infra agentbox Dockerfile." \
             --prerelease \
             opencode-linux-x64
+
+      - name: Create or update versioned semver release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          if gh release view "v${VERSION}" >/dev/null 2>&1; then
+            gh release upload "v${VERSION}" opencode-linux-x64 --clobber
+          else
+            gh release create "v${VERSION}" \
+              --title "v${VERSION}" \
+              --notes "Agentbox fork of opencode v${VERSION} (built from \`main\` at ${{ github.sha }})." \
+              opencode-linux-x64
+          fi
 
       - name: Dispatch agentbox rebuild to infra
         uses: actions/github-script@v7

@@ -67,7 +67,7 @@ export function isLocal() {
 
 export class UpgradeFailedError extends Schema.TaggedErrorClass<UpgradeFailedError>()("UpgradeFailedError", {
   stderr: Schema.String,
-}) {}
+}) { }
 
 // Response schemas for external version APIs
 const GitHubRelease = Schema.Struct({ tag_name: Schema.String })
@@ -88,7 +88,7 @@ export interface Interface {
   readonly upgrade: (method: Method, target: string) => Effect.Effect<void, UpgradeFailedError>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/Installation") {}
+export class Service extends Context.Service<Service, Interface>()("@opencode/Installation") { }
 
 export const layer: Layer.Layer<Service, never, HttpClient.HttpClient | ChildProcessSpawner.ChildProcessSpawner> =
   Layer.effect(
@@ -143,21 +143,12 @@ export const layer: Layer.Layer<Service, never, HttpClient.HttpClient | ChildPro
 
       const upgradeCurl = Effect.fnUntraced(
         function* (target: string) {
-          const response = yield* httpOk.execute(HttpClientRequest.get("https://opencode.ai/install"))
-          const body = yield* response.text
-          const bodyBytes = new TextEncoder().encode(body)
-          const proc = ChildProcess.make("bash", [], {
-            stdin: Stream.make(bodyBytes),
-            env: { VERSION: target },
-            extendEnv: true,
-          })
-          const handle = yield* spawner.spawn(proc)
-          const [stdout, stderr] = yield* Effect.all(
-            [Stream.mkString(Stream.decodeText(handle.stdout)), Stream.mkString(Stream.decodeText(handle.stderr))],
-            { concurrency: 2 },
+          const arch = process.arch === "x64" ? "x64" : "arm64"
+          const url = `https://github.com/sencerburak/opencode/releases/download/v${target}/opencode-linux-${arch}`
+          const dest = process.execPath
+          return yield* run(
+            ["bash", "-c", `curl -fsSL -o "${dest}.tmp" "${url}" && chmod +x "${dest}.tmp" && mv "${dest}.tmp" "${dest}"`],
           )
-          const code = yield* handle.exitCode
-          return { code, stdout, stderr }
         },
         Effect.scoped,
         Effect.orDie,
@@ -254,7 +245,7 @@ export const layer: Layer.Layer<Service, never, HttpClient.HttpClient | ChildPro
           }
 
           const response = yield* httpOk.execute(
-            HttpClientRequest.get("https://api.github.com/repos/anomalyco/opencode/releases/latest").pipe(
+            HttpClientRequest.get("https://api.github.com/repos/sencerburak/opencode/releases/latest").pipe(
               HttpClientRequest.acceptJson,
             ),
           )
