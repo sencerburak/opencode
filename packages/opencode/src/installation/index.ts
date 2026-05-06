@@ -145,7 +145,8 @@ export const layer: Layer.Layer<Service, never, HttpClient.HttpClient | ChildPro
         function* (target: string) {
           const arch = process.arch === "x64" ? "x64" : "arm64"
           const url = `https://github.com/sencerburak/opencode/releases/download/v${target}/opencode-linux-${arch}`
-          const dest = process.execPath
+          // Use OPENCODE_BIN_PATH if available (set in containers), otherwise fall back to process.execPath
+          const dest = process.env.OPENCODE_BIN_PATH || process.execPath
           return yield* run(
             ["bash", "-c", `curl -fsSL -o "${dest}.tmp" "${url}" && chmod +x "${dest}.tmp" && mv "${dest}.tmp" "${dest}"`],
           )
