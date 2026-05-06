@@ -92,6 +92,7 @@ jobs:
                 sha: context.sha,
                 ref: context.ref,
                 message: context.payload.head_commit?.message ?? '',
+                version: '${{ steps.version.outputs.version }}',
               },
             });
-            console.log(`Dispatched opencode-updated to sencerburak/infra (sha: ${context.sha})`);
+            console.log(`Dispatched opencode-updated to sencerburak/infra (sha: ${context.sha}, version: ${{ steps.version.outputs.version }})`);
